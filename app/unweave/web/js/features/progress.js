@@ -1,4 +1,4 @@
-import {SETUP_STEPS, YOUTUBE_STEPS, GUITAR_STEPS, SEPARATION_STEPS, SEPARATION_SPLIT_STEPS, EXPORT_STEPS, SETUP_STAGE_LABEL, SETUP_PHASE_TITLE, SETUP_PHASE_SUB} from '../core/constants.js';
+import {SETUP_STEPS, YOUTUBE_STEPS, GUITAR_STEPS, SEPARATION_STEPS, SEPARATION_SPLIT_STEPS, EXPORT_STEPS, CHORD_STEPS, SETUP_STAGE_LABEL, SETUP_PHASE_TITLE, SETUP_PHASE_SUB} from '../core/constants.js';
 import {$, el, api, notice, serverNow, duration} from '../core/core.js';
 import {store, nav} from '../core/store.js';
 import {t, onLangChange} from '../core/i18n.js';
@@ -72,7 +72,7 @@ buildProgress($('yt-panel'));
 onLangChange(() => { for (const panel of [$('job-panel'), $('yt-panel')]) applyProgressChrome(panel); });
 export const CIRCUMFERENCE = 2 * Math.PI * 52;
 
-const TIMED_PHASES = new Set(['separate', 'guitar', 'export', 'download']);
+const TIMED_PHASES = new Set(['separate', 'guitar', 'export', 'download', 'beats', 'chords', 'lyrics']);
 
 export function renderProgress(panel, job) {
   panel.dataset.jobId = job.id; panel.job = job;
@@ -81,7 +81,8 @@ export function renderProgress(panel, job) {
   const youtube = job.kind === 'youtube';
   const setup = job.kind === 'setup';
   const exportJob = job.kind === 'export';
-  const steps = setup ? SETUP_STEPS : youtube ? YOUTUBE_STEPS : exportJob ? EXPORT_STEPS : job.guitar_split ? GUITAR_STEPS : job.split_leaves ? SEPARATION_SPLIT_STEPS : SEPARATION_STEPS;
+  const chordJob = job.kind === 'chords';
+  const steps = setup ? SETUP_STEPS : youtube ? YOUTUBE_STEPS : exportJob ? EXPORT_STEPS : chordJob ? CHORD_STEPS : job.guitar_split ? GUITAR_STEPS : job.split_leaves ? SEPARATION_SPLIT_STEPS : SEPARATION_STEPS;
   const running = ['running', 'cancelling'].includes(job.status);
   let phase = setup ? job.phase : job.status === 'succeeded' ? 'done' : job.phase === 'download' && !youtube ? 'load' : job.phase;
   // A split-only job runs the guitar model as its one and only pass, so its phase
@@ -133,6 +134,14 @@ export function renderProgress(panel, job) {
     const ended = {succeeded: t('export.phase.complete'), failed: t('export.phase.failed'), cancelled: t('progress.cancelled')};
     title = job.status === 'cancelling' ? t('progress.stopping') : running ? titles[phase] || t('progress.working') : ended[job.status];
     sub = running ? t('export.phase.workingSub') : job.error || (job.status === 'succeeded' ? t('export.phase.readySub') : '');
+  } else if (chordJob) {
+    const titles = {
+      prepare: t('chords.phase.prepare'), beats: t('chords.phase.beats'), chords: t('chords.phase.chords'),
+      key: t('chords.phase.key'), lyrics: t('chords.phase.lyrics'), finalize: t('chords.phase.finalize'),
+    };
+    const ended = {succeeded: t('chords.phase.complete'), failed: t('chords.phase.failed'), cancelled: t('progress.cancelled')};
+    title = job.status === 'cancelling' ? t('progress.stopping') : running ? titles[phase] || t('progress.working') : ended[job.status];
+    sub = running ? t('chords.phase.workingSub') : job.error || (job.status === 'succeeded' ? t('chords.phase.readySub') : '');
   } else {
     const titles = {prepare: job.guitar_split ? t('sep.phase.prepareGuitar') : t('sep.phase.prepareNormal'), load: job.phase === 'download' ? t('sep.phase.downloadModel') : t('sep.phase.loadModel'),
       download: t('sep.phase.downloadYoutube'), separate: job.guitar_split ? t('sep.phase.separateGuitar') : t('sep.phase.separateNormal'),
@@ -147,7 +156,7 @@ export function renderProgress(panel, job) {
   panel.querySelector('.pv-sub').textContent = sub;
   const cancel = panel.querySelector('.pv-cancel');
   cancel.hidden = !running; cancel.disabled = job.status === 'cancelling';
-  panel.querySelector('.pv-stems').textContent = setup || youtube ? '—' : (job.stems || []).length;
+  panel.querySelector('.pv-stems').textContent = setup || youtube || chordJob ? '—' : (job.stems || []).length;
   const list = panel.querySelector('.pv-steps'); list.replaceChildren();
   const current = phase === 'done' ? steps.length : Math.max(0, steps.findIndex(([key]) => key === phase));
   // Names the step the ring is counting, so its % never reads as the whole job's.

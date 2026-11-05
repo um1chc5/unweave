@@ -5,6 +5,7 @@ import {StemPlayer} from './player.js';
 import {openSplitDialog} from './split.js';
 import {formatClock} from './trim.js';
 import {t, onLangChange} from '../core/i18n.js';
+import {syncChordPlayhead} from '../features/chords.js';
 export const player = new StemPlayer();
 player.onError = error => notice(error.message);
 export function clearAudio() {
@@ -252,5 +253,6 @@ export function animate() {
   $('play').dataset.state = player.starting ? 'starting' : player.playing ? 'playing' : 'paused';
   $('play').setAttribute('aria-label', player.starting ? t('audio.cancelPlaybackStart') : player.playing ? t('audio.pause') : t('audio.play'));
   document.querySelectorAll('.playhead').forEach(p => p.style.left = `${player.duration ? position / player.duration * 100 : 0}%`);
+  try { syncChordPlayhead(position); } catch (_) { /* chord panel optional */ }
   requestAnimationFrame(animate);
 }

@@ -1,6 +1,6 @@
 # Idea — Chord, key and lyric chord-sheet detection
 
-Status: Idea (not scheduled, not specified)
+Status: Graduated → [16 — Chord, key and lyric sheet](../specs/16-chord-key-lyrics-sheet.md)
 
 What this covers: producing a Chordify-style chord sheet from an already-separated song — chord recognition, key/tonality, beat grid, and optionally lyrics aligned under the chords. Library and model options, what each can realistically deliver, and where it would hook into the existing pipeline.
 

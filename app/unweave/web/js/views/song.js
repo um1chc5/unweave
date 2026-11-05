@@ -7,8 +7,10 @@ import {coverImage} from '../features/covers.js';
 import {ORIGINAL_FILE, EXPORT_FORMATS} from '../core/constants.js';
 import {TrimEditor, trimRequest, sectionText, formatClock} from '../audio/trim.js';
 import {t} from '../core/i18n.js';
+import {initChordSheet, renderChordSheet, renderSongStudioVisibility} from '../features/chords.js';
 // The callout teaches one fact, so it only shows until the user has acknowledged it;
 // the button highlight still marks each newly finished song.
+initChordSheet();
 const STEMS_HINT_KEY = 'unweave.stemsFolderHintSeen';
 function stemsHintSeen() {
   try { return localStorage.getItem(STEMS_HINT_KEY) === '1'; } catch (_) { return false; }
@@ -165,8 +167,11 @@ export function renderSong() {
   if (showJob) renderProgress($('job-panel'), job);
   const hasStems = project.stems.length > 0;
   const showPlayer = (hasStems || !!project.original) && !busyHere;
-  $('mixer').hidden = !showPlayer;
+  const showChordsTab = hasStems && store.songStudioTab === 'chords' && !busyHere;
+  $('mixer').hidden = !showPlayer || showChordsTab;
   $('transport').hidden = !showPlayer;
+  renderSongStudioVisibility();
+  if (hasStems && !busyHere) renderChordSheet();
   document.querySelector('.mixer .panel-sub').textContent = hasStems
     ? t('mixer.subWithOriginal')
     : t('mixer.subPreviewOriginal');

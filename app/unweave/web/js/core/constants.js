@@ -20,6 +20,7 @@ export const SEPARATION_SPLIT_STEPS = [['prepare', 'step.separation.prepare'], [
 export const GUITAR_STEPS = [['prepare', 'step.guitar.prepare'], ['separate', 'step.guitar.separate'], ['finalize', 'step.guitar.finalize']];
 export const YOUTUBE_STEPS = [['download', 'step.youtube.download'], ['finalize', 'step.youtube.finalize']];
 export const EXPORT_STEPS = [['prepare', 'step.export.prepare'], ['export', 'step.export.export'], ['finalize', 'step.export.finalize']];
+export const CHORD_STEPS = [['prepare', 'step.chords.prepare'], ['beats', 'step.chords.beats'], ['chords', 'step.chords.chords'], ['key', 'step.chords.key'], ['lyrics', 'step.chords.lyrics'], ['finalize', 'step.chords.finalize']];
 export const EXPORT_FORMATS = [
   ['flac', 'format.flac.title', 'format.flac.sub'],
   ['mp3', 'format.mp3.title', 'format.mp3.sub'],

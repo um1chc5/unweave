@@ -27,7 +27,7 @@
 
 Explorations, not commitments. Nothing here is scheduled; if an idea graduates it becomes a numbered spec.
 
-- [ideas/chord-key-lyrics-sheet.md](ideas/chord-key-lyrics-sheet.md) — Chordify-style chord/key detection over existing stems, plus optional lyric alignment
+- [specs/16-chord-key-lyrics-sheet.md](specs/16-chord-key-lyrics-sheet.md) — Chord sheet Song tab (graduated from ideas/)
 
 ## Learning
 

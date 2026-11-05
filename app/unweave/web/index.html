@@ -258,6 +258,22 @@
 
         <section id="job-panel" class="progress-view" hidden aria-live="polite"></section>
 
+        <div id="song-studio-tabs" class="song-studio-tabs" role="tablist" hidden>
+          <button type="button" id="song-tab-mixer" class="song-studio-tab on" role="tab" aria-selected="true" data-i18n="mixer.title">Mixer</button>
+          <button type="button" id="song-tab-chords" class="song-studio-tab" role="tab" aria-selected="false" data-i18n="chords.tab">Chord sheet</button>
+        </div>
+
+        <section id="chord-panel" class="card chord-panel" hidden>
+          <div class="panel-header">
+            <div>
+              <h2 data-i18n="chords.tab">Chord sheet</h2>
+              <p class="panel-sub" data-i18n="chords.sub">Key, beats and chords from your stems. Tap a chord to correct it.</p>
+            </div>
+            <div id="chord-meta" class="chord-meta"></div>
+          </div>
+          <div id="chord-panel-body"></div>
+        </section>
+
         <section id="resep-panel" class="card resep-card" hidden>
           <div class="panel-header">
             <div><h2 id="resep-title">Separate this song</h2><p id="separation-description" class="panel-sub"></p></div>

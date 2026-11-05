@@ -18,6 +18,10 @@ from ..projects import describe_project, import_project, metadata_fields, projec
 from ..audio.sources import youtube_url, youtube_command
 from ..audio.pipeline import probe_duration, parse_trim
 from ..audio.exports import FORMATS, export_stems
+from ..audio.chords import (analyze_project, chords_available, invalidate_chords,
+                            lyrics_available, read_chords, save_chord_overrides,
+                            save_ui_prefs)
+from ..audio.chordpro import to_chordpro, write_chordpro_export
 from ..tools import (MISSING_FFMPEG, PCM_BYTES_PER_SECOND, app_version, cpu_threads, ensure_ffmpeg_on_path,
                      env_first, require_free_space, total_ram_gb)
 from ..processes import popen, stop as stop_process
@@ -258,6 +262,8 @@ class JobQueueMixin:
             elif kind == "export":
                 self._export(job, job["_project"], job["_formats"], job["_stems"],
                              job["_prevent_clipping"])
+            elif kind == "chords":
+                self._chords(job, job["_project"], job.get("_lyrics", False))
         finally:
             with self.lock:
                 self._finish(job)
@@ -521,6 +527,8 @@ class JobQueueMixin:
                         if backup.exists():
                             backup.rename(destination)
                         raise
+                    # Stem timeline changed — drop derived chord sheet.
+                    invalidate_chords(project)
                     job.update(status="succeeded", progress=100, step_progress=100, phase="done", eta=0)
         except Exception as error:
             with self.lock:
@@ -570,6 +578,84 @@ class JobQueueMixin:
             path = stage / f"{name}.flac"
             if not path.is_file() or path.stat().st_size <= 44:
                 raise RuntimeError(f"CLI did not produce {name}.flac.")
+
+    def start_chords(self, identifier: str, *, lyrics: bool = False):
+        with self.lock:
+            project = project_path(self.require_root(), identifier)
+            info = describe_project(project)
+            if not info["stems"]:
+                raise ValueError("Separate the song into stems before analyzing chords.")
+            if not chords_available():
+                raise ValueError(
+                    "Chord analysis needs librosa, numpy, and soundfile "
+                    "(install the guitars/chords extras)."
+                )
+            if lyrics and not lyrics_available():
+                raise ValueError(
+                    "Lyrics need faster-whisper. Install it or uncheck lyrics and analyze chords only."
+                )
+            # Rough scratch space for the mixed harmony WAV.
+            require_free_space(project, 80_000_000)
+            job = {"id": uuid.uuid4().hex, "kind": "chords", "project": identifier,
+                   "status": "queued", "started": time.time(), "finished": None, "error": None,
+                   "lyrics": bool(lyrics),
+                   "phase": "prepare", "progress": 0, "step_progress": 0, "eta": None,
+                   "step_eta": None, "step_eta_at": None, "eta_estimated": False,
+                   "pass_count": 1, "pass_index": 1,
+                   "_project": project, "_lyrics": bool(lyrics)}
+            return self._enqueue(job)
+
+    def _chords(self, job, project: Path, lyrics: bool):
+        try:
+            def report(phase, pct):
+                with self.lock:
+                    if job["status"] == "cancelling":
+                        raise RuntimeError("Chord analysis cancelled.")
+                    job["phase"] = phase if phase != "done" else "finalize"
+                    job["progress"] = max(2, min(96, float(pct)))
+                    job["step_progress"] = max(job.get("step_progress") or 0, round(float(pct)))
+                    if pct > 5:
+                        job["eta"] = (time.time() - job["started"]) / (pct / 100) + 1
+                        job["eta_at"] = time.time()
+                        job["step_eta"] = job["eta"]
+                        job["step_eta_at"] = job["eta_at"]
+                        job["eta_estimated"] = False
+
+            analyze_project(project, lyrics=lyrics, report=report)
+            with self.lock:
+                if job["status"] != "cancelling":
+                    job.update(status="succeeded", progress=100, step_progress=100,
+                               phase="done", eta=0)
+        except Exception as error:
+            with self.lock:
+                if job["status"] != "cancelling":
+                    job.update(status="failed", error=str(error))
+
+    def update_chord_overrides(self, identifier: str, overrides):
+        with self.lock:
+            project = project_path(self.require_root(), identifier)
+            return save_chord_overrides(project, overrides)
+
+    def update_chord_ui(self, identifier: str, ui: dict):
+        with self.lock:
+            project = project_path(self.require_root(), identifier)
+            return save_ui_prefs(project, ui)
+
+    def export_chordpro(self, identifier: str, *, mode: str = "simple"):
+        with self.lock:
+            project = project_path(self.require_root(), identifier)
+            info = describe_project(project)
+            data = read_chords(project)
+            if not data:
+                raise ValueError("No chord analysis to export.")
+            if mode not in {"simple", "extended"}:
+                mode = (data.get("ui") or {}).get("mode") or "simple"
+            path = write_chordpro_export(
+                project, data, title=info.get("title") or "", artist=info.get("artist") or "",
+                mode=mode,
+            )
+            return {"ok": True, "file": path.name, "text": to_chordpro(
+                data, title=info.get("title") or "", artist=info.get("artist") or "", mode=mode)}
 
     def start_export(self, identifier: str, formats, stems, *, prevent_clipping=True):
         with self.lock:

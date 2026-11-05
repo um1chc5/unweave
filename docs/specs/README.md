@@ -21,6 +21,7 @@ Unweave is a local desktop stem separator with a Python backend and vanilla ES-m
 | 13 | [Leftover clean-up and startup dialog](13-startup-cleanup.md) | Done | Shared scanner (`cleanup.py`); download caps; project-local `input.wav`; silent &lt;50 MB / dialog ≥50 MB; Settings → Storage leftover row; NSIS “Run Unweave now” via Explorer; `UNWEAVE_CLEANUP_TEMP` for safe testing. |
 | 14 | [React + TypeScript frontend](14-react-typescript-frontend.md) | Todo | Rewrite the vanilla ES-module UI as a typed React app built by Vite, output committed to `web/` so no Node is needed to install. Reverses spec 01's "no frontend framework" goal; no Python/API/pipeline changes. |
 | 15 | [In-app error report](15-error-report.md) | Done | Copy-only diagnostics (version, OS, setup stages, log tail) from failed jobs and Settings → About; optional GitHub Issues link. No upload / telemetry. |
+| 16 | [Chord, key and lyric sheet](16-chord-key-lyrics-sheet.md) | Doing | Song-tab chord sheet, queued analysis over stems, edits, ChordPro export, optional local lyrics. Remaining: first-run install polish for `.[chords]` extras; network lyric fetch is follow-up. |
 | — | Web module/CSS refactor | Done | ES modules are under `web/js/`; six CSS files are under `web/css/`; static serving uses generic safe handling. |
 | — | Python package refactor | Done | Split into `audio/`, `projects/`, and `webui/` is complete; package-layout smoke tests pass. `webui/` further split: Express-style `router`/`routes/`, plus `queue` / `settings` / `progress` / `plans` under a thin `Library` façade. |
 
@@ -45,5 +46,6 @@ The status board is the single source of truth: **Done** means the described beh
 13. [13 — Leftover clean-up and startup dialog](13-startup-cleanup.md)
 14. [14 — React + TypeScript frontend](14-react-typescript-frontend.md)
 15. [15 — In-app error report](15-error-report.md)
+16. [16 — Chord, key and lyric sheet](16-chord-key-lyrics-sheet.md)
 
 See the [docs index](../README.md) for architecture, project overview, and desktop packaging documentation.

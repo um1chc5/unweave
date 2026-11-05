@@ -57,6 +57,31 @@ def register(router, library):
             return library.start_export(id, data.get("formats"), data.get("stems"),
                                         prevent_clipping=data.get("prevent_clipping", True))
 
+    @router.post("/api/projects/{id}/analyze-chords")
+    def analyze_chords(req, query, id, **_):
+        with library.lock:
+            data = req.json_body()
+            library.require_matching_root(data.get("root"))
+            return library.start_chords(id, lyrics=bool(data.get("lyrics")))
+
+    @router.post("/api/projects/{id}/chords")
+    def update_chords(req, query, id, **_):
+        with library.lock:
+            data = req.json_body()
+            library.require_matching_root(data.get("root"))
+            if "overrides" in data:
+                return library.update_chord_overrides(id, data.get("overrides"))
+            if "ui" in data:
+                return library.update_chord_ui(id, data.get("ui") or {})
+            raise ValueError("Provide overrides or ui.")
+
+    @router.post("/api/projects/{id}/export-chordpro")
+    def export_chordpro(req, query, id, **_):
+        with library.lock:
+            data = req.json_body()
+            library.require_matching_root(data.get("root"))
+            return library.export_chordpro(id, mode=data.get("mode") or "simple")
+
     @router.post("/api/projects/{id}/reveal")
     def reveal(req, query, id, **_):
         with library.lock:

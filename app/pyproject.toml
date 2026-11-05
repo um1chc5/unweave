@@ -42,13 +42,21 @@ guitars = [
     "numpy>=1.26",
     "audioread>=3.0",
 ]
+chords = [
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "numpy>=1.26",
+    "beat-this>=1.0",
+    "autochord>=0.1.4",
+    "faster-whisper>=1.0",
+]
 youtube = [
     # YouTube breaks old extractors often; keep a recent floor so first-run
     # install / repair does not leave a 2024-era yt-dlp that exits 1.
     "yt-dlp>=2025.10.14",
 ]
 full = [
-    "unweave[separation,guitars,youtube]",
+    "unweave[separation,guitars,youtube,chords]",
 ]
 
 [project.scripts]
