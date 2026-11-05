@@ -334,33 +334,50 @@ dialog form { display: flex; flex-direction: column; gap: 16px; padding: 22px 24
 .chord-empty p { margin: 0 auto 16px; max-width: 42ch; color: var(--text-3); }
 .chord-lyrics-opt { justify-content: center; margin-bottom: 14px; color: var(--text-3); font-size: 13px; }
 .chord-sheet {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 10px 16px 16px;
-  font-family: var(--font-mono); max-height: min(60vh, 640px); overflow: auto;
+  background: var(--bg-raised); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 10px;
+  font-family: var(--font-mono); max-height: min(70vh, 720px); overflow: auto;
 }
-.chord-measure {
-  display: grid; grid-template-columns: 36px 1fr; gap: 10px;
-  padding: 10px 0; border-bottom: 1px dashed var(--line);
+.chord-sheet-grid { padding: 8px; }
+/* Chordify-like compact wrapping bars */
+.chord-grid {
+  display: flex; flex-wrap: wrap; align-content: flex-start;
+  border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden;
+  background: var(--surface);
 }
-.chord-measure:last-child { border-bottom: 0; }
-.chord-bar-no { color: var(--text-3); font-size: 11px; padding-top: 4px; }
-.chord-row { display: flex; flex-wrap: wrap; gap: 14px 22px; margin-bottom: 6px; }
-.chord-chip {
-  appearance: none; border: 0; background: transparent; cursor: pointer;
-  font: inherit; font-weight: 500; color: var(--accent);
-  border-radius: 4px; padding: 0 2px; position: relative;
+.chord-bar {
+  --chord-bpp: 4;
+  display: grid;
+  grid-template-columns: repeat(var(--chord-bpp), 2.6rem);
+  border-right: 2px solid var(--line-strong);
+  border-bottom: 1px solid var(--line);
 }
-.chord-chip:hover { background: var(--accent-soft); }
-.chord-chip.low { color: var(--text-3); }
-.chord-chip.active { outline: 1px solid var(--accent); background: var(--accent-soft); }
-.chord-lyrics { color: var(--text); font-family: var(--font); font-size: 15px; }
-.chord-word.on { background: rgba(255, 138, 61, .18); border-radius: 3px; }
-.chord-instrumental { color: var(--text-3); font-style: italic; font-size: 13px; }
+.chord-beat {
+  appearance: none; margin: 0; padding: 0;
+  box-sizing: border-box; width: 2.6rem; height: 2.35rem;
+  border: 0; border-right: 1px solid var(--line);
+  background: transparent; color: var(--text);
+  font: inherit; font-size: 12px; font-weight: 600;
+  letter-spacing: -.02em; cursor: pointer;
+  display: grid; place-items: center; position: relative;
+}
+.chord-bar .chord-beat:last-child { border-right: 0; }
+.chord-beat.hold { color: transparent; }
+.chord-beat.low { color: var(--text-3); }
+.chord-beat.hold.low { color: transparent; }
+.chord-beat:hover { background: var(--accent-soft); color: var(--accent); }
+.chord-beat.hold:hover { color: var(--accent); }
+.chord-beat.active {
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
+}
+.chord-instrumental { color: var(--text-3); font-style: italic; font-size: 13px; margin: 8px; }
 .chord-popover {
-  position: absolute; z-index: 5; top: 120%; left: 0; width: 220px; padding: 10px;
+  position: absolute; z-index: 5; top: 110%; left: 0; width: 220px; padding: 10px;
   background: var(--surface-3); border: 1px solid var(--line-strong);
   border-radius: 12px; box-shadow: 0 16px 32px -12px rgba(0, 0, 0, .7);
-  text-align: left;
+  text-align: left; color: var(--text);
 }
 .chord-popover strong { display: block; font-size: 12px; color: var(--text-3); margin-bottom: 8px; font-weight: 500; font-family: var(--font); }
 .chord-alts { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -371,3 +388,4 @@ dialog form { display: flex; flex-direction: column; gap: 16px; padding: 22px 24
 .chord-alts button.pick { border-color: var(--accent); color: var(--accent); }
 .chord-popover-actions { margin-top: 8px; display: flex; gap: 6px; }
 .chord-stale { margin-bottom: 12px; }
+

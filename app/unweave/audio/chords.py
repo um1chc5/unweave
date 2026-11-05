@@ -209,7 +209,75 @@ def _mix_harmony(project: Path, work: Path, report=None) -> tuple[Path, dict]:
     return out, source
 
 
-def _detect_beats(audio_path: Path, report=None) -> list[dict]:
+def _clamp_beats_per_bar(value: int) -> int:
+    """Map a raw estimate onto the meters we support: 3/4, 4/4, 6/4."""
+    if value <= 3:
+        return 3
+    if value >= 6:
+        return 6
+    return 4
+
+
+def _meter_from_downbeats(beat_times: list[float], downbeat_times: list[float]) -> tuple[int, int]:
+    """Infer beats-per-bar + phase from beat_this downbeats."""
+    import numpy as np
+    if len(beat_times) < 4 or len(downbeat_times) < 2:
+        return 4, 0
+    beat_iv = float(np.median(np.diff(beat_times)))
+    down_iv = float(np.median(np.diff(downbeat_times)))
+    if beat_iv <= 1e-6:
+        return 4, 0
+    bpp = _clamp_beats_per_bar(int(round(down_iv / beat_iv)))
+    # Phase = beat index of the first downbeat
+    first = downbeat_times[0]
+    phase = int(min(range(len(beat_times)), key=lambda i: abs(beat_times[i] - first))) % bpp
+    return bpp, phase
+
+
+def _estimate_meter(y, sr, beat_times: list[float]) -> tuple[int, int]:
+    """Pick 3, 4, or 6 beats/bar by which grid puts strong onsets on downbeats."""
+    import librosa
+    import numpy as np
+    if len(beat_times) < 8:
+        return 4, 0
+    onset = librosa.onset.onset_strength(y=y, sr=sr)
+    frames = librosa.time_to_frames(np.asarray(beat_times), sr=sr)
+    frames = np.clip(frames, 0, len(onset) - 1)
+    strengths = onset[frames].astype(float)
+    best = (-1e9, 4, 0)  # score, bpp, phase
+    for bpp in (3, 4, 6):
+        for phase in range(bpp):
+            idx = np.arange(len(strengths))
+            down = ((idx - phase) % bpp) == 0
+            if down.sum() < 2 or (~down).sum() < 2:
+                continue
+            score = float(strengths[down].mean() - strengths[~down].mean())
+            # Mild preference for 4/4 when scores are close (most pop material).
+            if bpp == 4:
+                score += 0.02
+            if score > best[0]:
+                best = (score, bpp, phase)
+    return best[1], best[2]
+
+
+def _beats_with_meter(beat_times: list[float], bpp: int, phase: int) -> list[dict]:
+    rows = []
+    for i, t in enumerate(beat_times):
+        rows.append({
+            "t": float(t),
+            "beat": i + 1,
+            "downbeat": ((i - phase) % bpp) == 0,
+            "bar_beat": ((i - phase) % bpp) + 1,
+        })
+    return rows
+
+
+def _detect_beats(audio_path: Path, report=None) -> tuple[list[dict], dict]:
+    """Return (beat rows, meter). Meter is one of 3/4, 4/4, 6/4."""
+    import librosa
+    import numpy as np
+
+    meter = {"numerator": 4, "denominator": 4, "beats_per_bar": 4, "phase": 0}
     if importlib.util.find_spec("beat_this") is not None:
         try:
             from beat_this.inference import File2Beats
@@ -217,25 +285,36 @@ def _detect_beats(audio_path: Path, report=None) -> list[dict]:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             file2beats = File2Beats(checkpoint_path="final0", device=device, dbn=False)
             beats, downbeats = file2beats(str(audio_path))
-            down = set(float(t) for t in downbeats)
-            rows = []
-            for i, t in enumerate(beats):
-                rows.append({"t": float(t), "beat": i + 1, "downbeat": float(t) in down or i % 4 == 0})
+            beat_times = [float(t) for t in beats]
+            down_times = [float(t) for t in downbeats]
+            bpp, phase = _meter_from_downbeats(beat_times, down_times)
+            # Re-check with onset scoring when downbeat list is thin.
+            if len(down_times) < max(3, len(beat_times) // 12):
+                y, sr = librosa.load(str(audio_path), sr=None, mono=True)
+                bpp, phase = _estimate_meter(y, sr, beat_times)
+            meter = {
+                "numerator": bpp, "denominator": 4,
+                "beats_per_bar": bpp, "phase": phase,
+            }
+            rows = _beats_with_meter(beat_times, bpp, phase)
             if report:
                 report("beats", 35)
-            return rows
+            return rows, meter
         except Exception:
             pass
-    # librosa fallback
-    import librosa
-    import numpy as np
+
     y, sr = librosa.load(str(audio_path), sr=None, mono=True)
-    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
-    times = librosa.frames_to_time(beat_frames, sr=sr)
-    rows = [{"t": float(t), "beat": i + 1, "downbeat": i % 4 == 0} for i, t in enumerate(times)]
+    _tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+    times = [float(t) for t in librosa.frames_to_time(beat_frames, sr=sr)]
+    bpp, phase = _estimate_meter(y, sr, times)
+    meter = {
+        "numerator": bpp, "denominator": 4,
+        "beats_per_bar": bpp, "phase": phase,
+    }
+    rows = _beats_with_meter(times, bpp, phase)
     if report:
         report("beats", 35)
-    return rows
+    return rows, meter
 
 
 def _normalize_label(raw: str) -> tuple[str, str]:
@@ -554,7 +633,12 @@ def _transcribe_lyrics(project: Path, report=None) -> list[dict]:
 
 
 def analyze_project(project: Path, *, lyrics: bool = False, report=None) -> dict:
-    """Run full analysis and write analysis/chords.json."""
+    """Run chord/key/beat analysis and write analysis/chords.json.
+
+    Lyrics are intentionally unused (Chordify-style chords-only). The ``lyrics``
+    flag is accepted for API compatibility but ignored.
+    """
+    del lyrics  # product decision: no lyric transcription in the sheet
     if not chords_available():
         raise ValueError("Chord analysis needs librosa, numpy, and soundfile.")
     if not ensure_ffmpeg_on_path():
@@ -570,23 +654,13 @@ def analyze_project(project: Path, *, lyrics: bool = False, report=None) -> dict
         work = Path(temporary)
         harmony, source = _mix_harmony(project, work, report=progress)
         progress("prepare", 20)
-        beats = _detect_beats(harmony, report=progress)
+        beats, meter = _detect_beats(harmony, report=progress)
         raw = _detect_chords_raw(harmony, report=progress)
         key = _estimate_key(harmony, report=progress)
         chords = _snap_to_beats(raw, beats)
         progress("chords", 70)
         chords = refine_bass_roots(project, chords)
         chords = refine_extensions(harmony, chords, key, report=progress)
-        words = []
-        lyrics_error = None
-        if lyrics:
-            try:
-                words = _transcribe_lyrics(project, report=progress)
-            except Exception as error:
-                lyrics_error = str(error)
-                words = []
-                # Surface in the job log / terminal so "Lyrics skipped" is diagnosable.
-                print(f"Lyrics skipped: {lyrics_error}", flush=True)
         progress("finalize", 95)
 
         separation = {}
@@ -605,18 +679,17 @@ def analyze_project(project: Path, *, lyrics: bool = False, report=None) -> dict
             "source": {
                 **source,
                 "trim": trim,
-                "lyrics_requested": bool(lyrics),
-                "lyrics_error": lyrics_error,
                 "backend": {
                     "beats": "beat_this" if importlib.util.find_spec("beat_this") else "librosa",
                     "chords": "autochord" if importlib.util.find_spec("autochord") else "librosa",
                 },
             },
             "key": key,
+            "meter": meter,
             "beats": beats,
             "chords": chords,
-            "words": words,
-            "ui": {"mode": "simple", "lyrics_mode": "with_lyrics" if words else "chords_only"},
+            "words": [],
+            "ui": {"mode": "simple", "lyrics_mode": "chords_only"},
         }
         out_dir = project / ANALYSIS_DIR
         out_dir.mkdir(exist_ok=True)

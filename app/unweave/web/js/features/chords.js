@@ -15,10 +15,6 @@ function mode() {
   return store.chordMode || activeProject()?.chords?.ui?.mode || 'simple';
 }
 
-function lyricsMode() {
-  return store.chordLyricsMode || activeProject()?.chords?.ui?.lyrics_mode || 'chords_only';
-}
-
 export function setSongStudioTab(tab) {
   store.songStudioTab = tab === 'chords' ? 'chords' : 'mixer';
   const mixerTab = $('song-tab-mixer');
@@ -29,40 +25,9 @@ export function setSongStudioTab(tab) {
   if (chordsTab) chordsTab.setAttribute('aria-selected', String(store.songStudioTab === 'chords'));
 }
 
-function buildMeasures(data) {
-  const chords = data.chords || [];
-  const words = data.words || [];
-  const beats = data.beats || [];
-  const downbeats = beats.filter(b => b.downbeat).map(b => b.t);
-  const boundaries = downbeats.length ? downbeats : beats.map(b => b.t);
-  if (!boundaries.length) {
-    return [{bar: 1, start: 0, end: Infinity, chords, words}];
-  }
-  // Assign each chord to exactly one bar by start time (half-open [start, end)).
-  // No ±epsilon — that duplicated the bar-boundary chord on both lines.
-  const buckets = boundaries.map((start, i) => ({
-    bar: i + 1,
-    start,
-    end: i + 1 < boundaries.length ? boundaries[i + 1] : Infinity,
-    chords: [],
-    words: [],
-  }));
-  const barIndex = (t) => {
-    // Last bar whose start <= t
-    let idx = 0;
-    for (let i = 0; i < boundaries.length; i++) {
-      if (t + 1e-9 >= boundaries[i]) idx = i;
-      else break;
-    }
-    return idx;
-  };
-  for (const chord of chords) {
-    buckets[barIndex(Number(chord.start) || 0)].chords.push(chord);
-  }
-  for (const word of words) {
-    buckets[barIndex(Number(word.start) || 0)].words.push(word);
-  }
-  return buckets;
+function beatsPerBar(data) {
+  const n = Number(data?.meter?.beats_per_bar);
+  return n === 3 || n === 6 ? n : 4;
 }
 
 function closePopover() {
@@ -120,31 +85,11 @@ function showPopover(anchor, chord, index) {
   openPopover = pop;
 }
 
-function hasVocalsStem(project) {
-  return (project?.stems || []).some(s => String(s.file || '').toLowerCase().startsWith('vocals.'));
-}
-
 function renderEmpty(host, project) {
   host.replaceChildren();
   const box = el('div', 'chord-empty');
   box.append(el('h3', '', t('chords.emptyTitle')));
   box.append(el('p', '', t('chords.emptyBody')));
-  const lyrics = el('label', 'check-row chord-lyrics-opt');
-  const check = el('input');
-  check.type = 'checkbox';
-  check.id = 'chord-lyrics-check';
-  const canLyrics = hasVocalsStem(project);
-  // Default on when vocals exist so "I don't see lyrics" isn't from a missed checkbox.
-  if (store.chordWantLyrics == null) store.chordWantLyrics = canLyrics;
-  check.checked = !!store.chordWantLyrics && canLyrics;
-  check.disabled = !canLyrics;
-  store.chordWantLyrics = check.checked;
-  check.onchange = () => { store.chordWantLyrics = check.checked; };
-  lyrics.append(check, document.createTextNode(' ' + t('chords.alsoLyrics')));
-  box.append(lyrics);
-  if (!canLyrics) {
-    box.append(el('p', '', t('chords.noVocalsHint')));
-  }
   const go = el('button', 'btn btn-primary', t('chords.analyze'));
   go.type = 'button';
   go.disabled = !project.stems?.length;
@@ -156,12 +101,10 @@ function renderEmpty(host, project) {
 async function startAnalyze() {
   const project = activeProject();
   if (!project) return;
-  const wantLyrics = hasVocalsStem(project) && (store.chordWantLyrics !== false);
-  store.chordWantLyrics = wantLyrics;
   try {
     await api(`${projectUrl(project.id)}/analyze-chords`, {
       root: store.state.root,
-      lyrics: wantLyrics,
+      lyrics: false,
     });
     store.songStudioTab = 'chords';
     await nav.refresh();
@@ -187,36 +130,10 @@ function renderToolbar(host, data) {
     };
     simpleSeg.append(btn);
   }
-  const lyricSeg = el('div', 'seg');
-  const hasWords = (data.words || []).length > 0;
-  for (const [id, key] of [['with_lyrics', 'chords.withLyrics'], ['chords_only', 'chords.chordsOnly']]) {
-    const btn = el('button', lyricsMode() === id ? 'on' : '', t(key));
-    btn.type = 'button';
-    btn.disabled = id === 'with_lyrics' && !hasWords;
-    btn.onclick = async () => {
-      store.chordLyricsMode = id;
-      try {
-        await api(`${projectUrl(activeProject().id)}/chords`, {
-          root: store.state.root, ui: {lyrics_mode: id},
-        });
-      } catch (_) { /* ignore */ }
-      renderChordSheet();
-    };
-    lyricSeg.append(btn);
-  }
   const grow = el('span', 'grow');
   const follow = el('button', 'btn btn-ghost btn-sm' + (followPlayhead ? ' on' : ''), t('chords.follow'));
   follow.type = 'button';
   follow.onclick = () => { followPlayhead = !followPlayhead; renderChordSheet(); };
-  const lyricsOpt = el('label', 'check-row chord-lyrics-opt');
-  const lyricsCheck = el('input');
-  lyricsCheck.type = 'checkbox';
-  const canLyrics = hasVocalsStem(activeProject());
-  if (store.chordWantLyrics == null) store.chordWantLyrics = canLyrics;
-  lyricsCheck.checked = !!store.chordWantLyrics && canLyrics;
-  lyricsCheck.disabled = !canLyrics;
-  lyricsCheck.onchange = () => { store.chordWantLyrics = lyricsCheck.checked; };
-  lyricsOpt.append(lyricsCheck, document.createTextNode(' ' + t('chords.alsoLyrics')));
   const again = el('button', 'btn btn-ghost btn-sm', t('chords.reanalyze'));
   again.type = 'button';
   again.onclick = () => startAnalyze();
@@ -233,60 +150,85 @@ function renderToolbar(host, data) {
       notice(error.message, 'error');
     }
   };
-  bar.append(simpleSeg, lyricSeg, grow, follow, lyricsOpt, again, exp);
+  bar.append(simpleSeg, grow, follow, again, exp);
   host.append(bar);
 }
 
+function chordAtTime(chords, t) {
+  for (const chord of chords) {
+    if (t + 1e-9 >= chord.start && t < chord.end - 1e-9) return chord;
+  }
+  // Hold last chord that started at/before t
+  let best = null;
+  for (const chord of chords) {
+    if (chord.start <= t + 1e-9) best = chord;
+  }
+  return best;
+}
+
 function renderSheet(host, data) {
-  const sheet = el('div', 'chord-sheet');
-  const showLyrics = lyricsMode() === 'with_lyrics' && (data.words || []).length;
-  const measures = buildMeasures(data);
-  const allChords = data.chords || [];
-  measures.forEach((measure) => {
-    const row = el('div', 'chord-measure');
-    row.dataset.start = String(measure.start);
-    row.append(el('div', 'chord-bar-no', measure.bar === 1 || Number.isFinite(measure.end) ? String(measure.bar) : '—'));
-    const body = el('div');
-    const chordRow = el('div', 'chord-row');
-    for (const chord of measure.chords) {
-      const index = allChords.indexOf(chord);
-      const label = chordLabel(chord, mode());
-      if (label === 'N' && !chord.override) continue;
-      const conf = Number(chord.confidence || 0);
-      const span = el('button', 'chord-chip' + (conf < 0.55 ? ' low' : ''), label);
-      span.type = 'button';
-      span.dataset.index = String(index);
-      span.dataset.start = String(chord.start);
-      span.dataset.end = String(chord.end);
-      span.onclick = event => {
-        event.stopPropagation();
-        showPopover(span, chord, index);
-      };
-      chordRow.append(span);
+  // Chordify-style: compact wrapping bars, beat cells, label only on change.
+  const sheet = el('div', 'chord-sheet chord-sheet-grid');
+  const beats = data.beats || [];
+  const chords = data.chords || [];
+  const bpp = beatsPerBar(data);
+  sheet.style.setProperty('--chord-bpp', String(bpp));
+
+  if (!beats.length) {
+    sheet.append(el('p', 'chord-instrumental', t('chords.emptyBody')));
+    host.append(sheet);
+    return;
+  }
+
+  const grid = el('div', 'chord-grid');
+  grid.style.setProperty('--chord-bpp', String(bpp));
+  let bar = null;
+  let beatsInBar = 0;
+  let lastShown = null;
+  let barCount = 0;
+
+  const flushBar = () => {
+    if (bar) grid.append(bar);
+    bar = null;
+    beatsInBar = 0;
+  };
+
+  beats.forEach((beat, i) => {
+    const startNew = beat.downbeat || !bar || beatsInBar >= bpp;
+    if (startNew) {
+      flushBar();
+      bar = el('div', 'chord-bar');
+      bar.style.setProperty('--chord-bpp', String(bpp));
+      barCount += 1;
+      bar.dataset.bar = String(barCount);
+      beatsInBar = 0;
     }
-    if (!chordRow.childNodes.length) {
-      chordRow.append(el('span', 'chord-chip low', '—'));
-    }
-    body.append(chordRow);
-    if (showLyrics) {
-      const lyric = el('div', 'chord-lyrics');
-      if (measure.words.length) {
-        for (const word of measure.words) {
-          const w = el('span', 'chord-word', word.text + ' ');
-          w.dataset.start = String(word.start);
-          w.dataset.end = String(word.end);
-          lyric.append(w);
-        }
-      } else {
-        lyric.append(el('span', 'chord-instrumental', t('chords.instrumental')));
-      }
-      body.append(lyric);
-    } else if (!measure.chords.length) {
-      body.append(el('div', 'chord-lyrics', el('span', 'chord-instrumental', t('chords.instrumental'))));
-    }
-    row.append(body);
-    sheet.append(row);
+    const nextT = beats[i + 1]?.t;
+    const end = nextT != null ? nextT : beat.t + 0.5;
+    const chord = chordAtTime(chords, beat.t);
+    const index = chord ? chords.indexOf(chord) : -1;
+    const raw = chord ? chordLabel(chord, mode()) : '';
+    const label = raw && raw !== 'N' ? raw : '';
+    const show = label && label !== lastShown;
+    if (label) lastShown = label;
+
+    const cell = el('button', 'chord-beat' + (show ? '' : ' hold') + (chord && Number(chord.confidence || 1) < 0.55 ? ' low' : ''));
+    cell.type = 'button';
+    cell.textContent = show ? label : '';
+    cell.dataset.start = String(beat.t);
+    cell.dataset.end = String(end);
+    if (index >= 0) cell.dataset.index = String(index);
+    cell.title = label || lastShown || '';
+    cell.onclick = event => {
+      event.stopPropagation();
+      if (index < 0 || !chord) return;
+      showPopover(cell, chord, index);
+    };
+    bar.append(cell);
+    beatsInBar += 1;
   });
+  flushBar();
+  sheet.append(grid);
   host.append(sheet);
 }
 
@@ -303,31 +245,25 @@ export function renderChordSheet() {
   if (meta) meta.replaceChildren();
 
   if (data?.stale) {
-    const warn = el('div', 'alert chord-stale', t('chords.stale'));
-    host.append(warn);
+    host.append(el('div', 'alert chord-stale', t('chords.stale')));
   }
 
   if (!data || !Array.isArray(data.chords)) {
-    if (meta) {
-      /* empty */
-    }
     renderEmpty(host, project);
     return;
   }
 
   if (meta) {
     if (data.key?.name) meta.append(el('span', 'chip key', t('chords.key', {key: data.key.name})));
+    const meter = data.meter;
+    if (meter?.numerator && meter?.denominator) {
+      meta.append(el('span', 'chip', t('chords.meter', {
+        meter: `${meter.numerator}/${meter.denominator}`,
+      })));
+    }
     const bpm = estimateBpm(data.beats);
     if (bpm) meta.append(el('span', 'chip', t('chords.bpm', {bpm})));
     meta.append(el('span', 'chip', t('chords.analyzed')));
-    if (data.source?.lyrics_error) {
-      meta.append(el('span', 'chip', t('chords.lyricsFailed')));
-      host.append(el('div', 'alert chord-stale',
-        t('chords.lyricsFailedDetail', {error: data.source.lyrics_error})));
-    } else if ((data.words || []).length && lyricsMode() !== 'with_lyrics') {
-      // Words exist — default the view to chords+lyrics once.
-      store.chordLyricsMode = 'with_lyrics';
-    }
   }
 
   renderToolbar(host, data);
@@ -349,30 +285,22 @@ function estimateBpm(beats) {
 export function syncChordPlayhead(position) {
   const sheet = document.querySelector('.chord-sheet');
   if (!sheet) return;
-  let activeChip = null;
-  sheet.querySelectorAll('.chord-chip').forEach(chip => {
-    const start = Number(chip.dataset.start);
-    const end = Number(chip.dataset.end);
+  let active = null;
+  sheet.querySelectorAll('.chord-beat').forEach(cell => {
+    const start = Number(cell.dataset.start);
+    const end = Number(cell.dataset.end);
     const on = Number.isFinite(start) && Number.isFinite(end) && position >= start && position < end;
-    chip.classList.toggle('active', on);
-    if (on) activeChip = chip;
+    cell.classList.toggle('active', on);
+    if (on) active = cell;
   });
-  sheet.querySelectorAll('.chord-word').forEach(word => {
-    const start = Number(word.dataset.start);
-    const end = Number(word.dataset.end);
-    word.classList.toggle('on', position >= start && position < end);
-  });
-  if (followPlayhead && activeChip && store.songStudioTab === 'chords') {
-    const measure = activeChip.closest('.chord-measure');
-    measure?.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+  if (followPlayhead && active && store.songStudioTab === 'chords') {
+    active.scrollIntoView({block: 'nearest', behavior: 'smooth'});
   }
 }
 
 export function initChordSheet() {
   store.songStudioTab = store.songStudioTab || 'mixer';
   store.chordMode = store.chordMode || null;
-  store.chordLyricsMode = store.chordLyricsMode || null;
-  store.chordWantLyrics = !!store.chordWantLyrics;
   $('song-tab-mixer')?.addEventListener('click', () => {
     setSongStudioTab('mixer');
     renderSongStudioVisibility();
@@ -383,7 +311,7 @@ export function initChordSheet() {
     renderChordSheet();
   });
   document.addEventListener('click', event => {
-    if (openPopover && !openPopover.contains(event.target) && !event.target.closest?.('.chord-chip')) {
+    if (openPopover && !openPopover.contains(event.target) && !event.target.closest?.('.chord-beat')) {
       closePopover();
     }
   });
@@ -399,6 +327,5 @@ export function renderSongStudioVisibility() {
   const mixer = $('mixer');
   const chordPanel = $('chord-panel');
   if (chordPanel) chordPanel.hidden = !showChords;
-  // Mixer visibility is still owned by renderSong; only hide when chords tab is active.
   if (mixer && showChords) mixer.hidden = true;
 }

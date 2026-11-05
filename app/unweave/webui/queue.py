@@ -19,8 +19,7 @@ from ..audio.sources import youtube_url, youtube_command
 from ..audio.pipeline import probe_duration, parse_trim
 from ..audio.exports import FORMATS, export_stems
 from ..audio.chords import (analyze_project, chords_available, invalidate_chords,
-                            lyrics_available, read_chords, save_chord_overrides,
-                            save_ui_prefs)
+                            read_chords, save_chord_overrides, save_ui_prefs)
 from ..audio.chordpro import to_chordpro, write_chordpro_export
 from ..tools import (MISSING_FFMPEG, PCM_BYTES_PER_SECOND, app_version, cpu_threads, ensure_ffmpeg_on_path,
                      env_first, require_free_space, total_ram_gb)
@@ -580,6 +579,7 @@ class JobQueueMixin:
                 raise RuntimeError(f"CLI did not produce {name}.flac.")
 
     def start_chords(self, identifier: str, *, lyrics: bool = False):
+        del lyrics  # Chordify-style chords only; flag kept for API compatibility.
         with self.lock:
             project = project_path(self.require_root(), identifier)
             info = describe_project(project)
@@ -590,22 +590,18 @@ class JobQueueMixin:
                     "Chord analysis needs librosa, numpy, and soundfile "
                     "(install the guitars/chords extras)."
                 )
-            if lyrics and not lyrics_available():
-                raise ValueError(
-                    "Lyrics need faster-whisper. Install it or uncheck lyrics and analyze chords only."
-                )
             # Rough scratch space for the mixed harmony WAV.
             require_free_space(project, 80_000_000)
             job = {"id": uuid.uuid4().hex, "kind": "chords", "project": identifier,
                    "status": "queued", "started": time.time(), "finished": None, "error": None,
-                   "lyrics": bool(lyrics),
+                   "lyrics": False,
                    "phase": "prepare", "progress": 0, "step_progress": 0, "eta": None,
                    "step_eta": None, "step_eta_at": None, "eta_estimated": False,
                    "pass_count": 1, "pass_index": 1,
-                   "_project": project, "_lyrics": bool(lyrics)}
+                   "_project": project, "_lyrics": False}
             return self._enqueue(job)
 
-    def _chords(self, job, project: Path, lyrics: bool):
+    def _chords(self, job, project: Path, lyrics: bool = False):
         try:
             def report(phase, pct):
                 with self.lock:
@@ -621,7 +617,7 @@ class JobQueueMixin:
                         job["step_eta_at"] = job["eta_at"]
                         job["eta_estimated"] = False
 
-            analyze_project(project, lyrics=lyrics, report=report)
+            analyze_project(project, lyrics=False, report=report)
             with self.lock:
                 if job["status"] != "cancelling":
                     job.update(status="succeeded", progress=100, step_progress=100,

@@ -27,7 +27,8 @@
 
 Explorations, not commitments. Nothing here is scheduled; if an idea graduates it becomes a numbered spec.
 
-- [specs/16-chord-key-lyrics-sheet.md](specs/16-chord-key-lyrics-sheet.md) — Chord sheet Song tab (graduated from ideas/)
+- [specs/16-chord-key-lyrics-sheet.md](specs/16-chord-key-lyrics-sheet.md) — Chordify-style chord sheet (meter 3/4·4/4·6/4, no lyrics; graduated from ideas/)
+- [ideas/chord-key-lyrics-sheet.md](ideas/chord-key-lyrics-sheet.md) — Original idea notes (lyrics abandoned; see spec 16)
 
 ## Learning
 

@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 from unweave.audio.chords import (
-    SCHEMA, _normalize_label, _snap_to_beats, invalidate_chords, read_chords,
+    SCHEMA, _clamp_beats_per_bar, _meter_from_downbeats, _normalize_label,
+    _snap_to_beats, invalidate_chords, read_chords,
 )
 from unweave.projects.store import atomic_json
 
@@ -15,6 +16,22 @@ class ChordHelperTests(unittest.TestCase):
         self.assertEqual(_normalize_label("D:maj"), ("D", "D"))
         self.assertEqual(_normalize_label("A:min"), ("Am", "Am"))
         self.assertEqual(_normalize_label("N"), ("N", "N"))
+
+    def test_meter_helpers(self):
+        self.assertEqual(_clamp_beats_per_bar(3), 3)
+        self.assertEqual(_clamp_beats_per_bar(4), 4)
+        self.assertEqual(_clamp_beats_per_bar(6), 6)
+        self.assertEqual(_clamp_beats_per_bar(5), 4)
+        # 4/4: downbeats every 4 beats at 0.5s
+        beats = [i * 0.5 for i in range(16)]
+        downs = [i * 2.0 for i in range(4)]
+        bpp, phase = _meter_from_downbeats(beats, downs)
+        self.assertEqual(bpp, 4)
+        self.assertEqual(phase, 0)
+        # 3/4
+        downs3 = [i * 1.5 for i in range(4)]
+        bpp3, _ = _meter_from_downbeats(beats, downs3)
+        self.assertEqual(bpp3, 3)
 
     def test_snap_merge(self):
         beats = [{"t": 0.0, "beat": 1, "downbeat": True},
