@@ -106,9 +106,14 @@ function announceJob(job) {
       if (!dialogShows) notice(exportSummary(job), 'success');
       return;
     }
+    if (job.kind === 'chords') {
+      const p = store.state.projects.find(x => x.id === job.project);
+      notice(t('chords.phase.complete') + (p?.title ? ` — ${p.title}` : ''), 'success');
+      return;
+    }
     store.stemsReady.add(job.project);
     const p = store.state.projects.find(x => x.id === job.project);
-    notice(t('nav.songReadyNotice', {title: p?.title || t('nav.defaultSongTitle'), count: job.stems.length}), 'success');
+    notice(t('nav.songReadyNotice', {title: p?.title || t('nav.defaultSongTitle'), count: (job.stems || []).length}), 'success');
   }
 }
 

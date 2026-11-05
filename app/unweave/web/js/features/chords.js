@@ -38,22 +38,31 @@ function buildMeasures(data) {
   if (!boundaries.length) {
     return [{bar: 1, start: 0, end: Infinity, chords, words}];
   }
-  const measures = [];
-  for (let i = 0; i < boundaries.length; i++) {
-    const start = boundaries[i];
-    const end = i + 1 < boundaries.length ? boundaries[i + 1] : Infinity;
-    measures.push({
-      bar: i + 1,
-      start,
-      end,
-      // Show a chord in the bar where it *starts* (holds span visually via merge).
-      chords: chords.filter(c => c.start >= start - 0.02 && c.start < end),
-      words: words.filter(w => w.start < end && w.end > start),
-    });
+  // Assign each chord to exactly one bar by start time (half-open [start, end)).
+  // No ±epsilon — that duplicated the bar-boundary chord on both lines.
+  const buckets = boundaries.map((start, i) => ({
+    bar: i + 1,
+    start,
+    end: i + 1 < boundaries.length ? boundaries[i + 1] : Infinity,
+    chords: [],
+    words: [],
+  }));
+  const barIndex = (t) => {
+    // Last bar whose start <= t
+    let idx = 0;
+    for (let i = 0; i < boundaries.length; i++) {
+      if (t + 1e-9 >= boundaries[i]) idx = i;
+      else break;
+    }
+    return idx;
+  };
+  for (const chord of chords) {
+    buckets[barIndex(Number(chord.start) || 0)].chords.push(chord);
   }
-  // Trailing chords after last downbeat already included via Infinity end.
-  // Chord-only gaps before first lyric: keep measures even with empty words.
-  return measures;
+  for (const word of words) {
+    buckets[barIndex(Number(word.start) || 0)].words.push(word);
+  }
+  return buckets;
 }
 
 function closePopover() {
@@ -111,6 +120,10 @@ function showPopover(anchor, chord, index) {
   openPopover = pop;
 }
 
+function hasVocalsStem(project) {
+  return (project?.stems || []).some(s => String(s.file || '').toLowerCase().startsWith('vocals.'));
+}
+
 function renderEmpty(host, project) {
   host.replaceChildren();
   const box = el('div', 'chord-empty');
@@ -120,10 +133,18 @@ function renderEmpty(host, project) {
   const check = el('input');
   check.type = 'checkbox';
   check.id = 'chord-lyrics-check';
-  check.checked = !!store.chordWantLyrics;
+  const canLyrics = hasVocalsStem(project);
+  // Default on when vocals exist so "I don't see lyrics" isn't from a missed checkbox.
+  if (store.chordWantLyrics == null) store.chordWantLyrics = canLyrics;
+  check.checked = !!store.chordWantLyrics && canLyrics;
+  check.disabled = !canLyrics;
+  store.chordWantLyrics = check.checked;
   check.onchange = () => { store.chordWantLyrics = check.checked; };
   lyrics.append(check, document.createTextNode(' ' + t('chords.alsoLyrics')));
   box.append(lyrics);
+  if (!canLyrics) {
+    box.append(el('p', '', t('chords.noVocalsHint')));
+  }
   const go = el('button', 'btn btn-primary', t('chords.analyze'));
   go.type = 'button';
   go.disabled = !project.stems?.length;
@@ -135,10 +156,12 @@ function renderEmpty(host, project) {
 async function startAnalyze() {
   const project = activeProject();
   if (!project) return;
+  const wantLyrics = hasVocalsStem(project) && (store.chordWantLyrics !== false);
+  store.chordWantLyrics = wantLyrics;
   try {
     await api(`${projectUrl(project.id)}/analyze-chords`, {
       root: store.state.root,
-      lyrics: !!store.chordWantLyrics,
+      lyrics: wantLyrics,
     });
     store.songStudioTab = 'chords';
     await nav.refresh();
@@ -185,6 +208,15 @@ function renderToolbar(host, data) {
   const follow = el('button', 'btn btn-ghost btn-sm' + (followPlayhead ? ' on' : ''), t('chords.follow'));
   follow.type = 'button';
   follow.onclick = () => { followPlayhead = !followPlayhead; renderChordSheet(); };
+  const lyricsOpt = el('label', 'check-row chord-lyrics-opt');
+  const lyricsCheck = el('input');
+  lyricsCheck.type = 'checkbox';
+  const canLyrics = hasVocalsStem(activeProject());
+  if (store.chordWantLyrics == null) store.chordWantLyrics = canLyrics;
+  lyricsCheck.checked = !!store.chordWantLyrics && canLyrics;
+  lyricsCheck.disabled = !canLyrics;
+  lyricsCheck.onchange = () => { store.chordWantLyrics = lyricsCheck.checked; };
+  lyricsOpt.append(lyricsCheck, document.createTextNode(' ' + t('chords.alsoLyrics')));
   const again = el('button', 'btn btn-ghost btn-sm', t('chords.reanalyze'));
   again.type = 'button';
   again.onclick = () => startAnalyze();
@@ -201,7 +233,7 @@ function renderToolbar(host, data) {
       notice(error.message, 'error');
     }
   };
-  bar.append(simpleSeg, lyricSeg, grow, follow, again, exp);
+  bar.append(simpleSeg, lyricSeg, grow, follow, lyricsOpt, again, exp);
   host.append(bar);
 }
 

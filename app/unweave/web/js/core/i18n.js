@@ -227,6 +227,7 @@ const STRINGS = {
   'chords.emptyTitle': {en: 'No chord sheet yet', vi: 'Chưa có bảng hợp âm'},
   'chords.emptyBody': {en: 'Detect key, beats and chords from the stems you already have. Lyrics are optional.', vi: 'Nhận diện giọng, nhịp và hợp âm từ stem có sẵn. Lời bài hát là tùy chọn.'},
   'chords.alsoLyrics': {en: 'Also transcribe lyrics from vocals (local, slower)', vi: 'Phiên âm lời từ vocal (chạy local, chậm hơn)'},
+  'chords.noVocalsHint': {en: 'No vocals stem in this project — separate with Vocals selected to enable lyrics.', vi: 'Project này không có stem vocals — hãy tách lại có Vocals để bật lời.'},
   'chords.analyze': {en: 'Analyze chords', vi: 'Phân tích hợp âm'},
   'chords.reanalyze': {en: 'Re-analyze', vi: 'Phân tích lại'},
   'chords.export': {en: 'Export ChordPro', vi: 'Xuất ChordPro'},

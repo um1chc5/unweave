@@ -514,14 +514,26 @@ def _transcribe_lyrics(project: Path, report=None) -> list[dict]:
     name = stem_file(project / "stems", "vocals")
     if not name:
         raise ValueError("No vocals stem to transcribe. Separate with Vocals selected, then re-analyze.")
+    import numpy as np
+    import soundfile as sf
     from faster_whisper import WhisperModel
     if report:
         report("lyrics", 78)
+    # Load via soundfile — avoids PyAV `metadata_errors` breakage on some av builds
+    # when faster-whisper opens FLAC paths directly.
+    path = project / "stems" / name
+    audio, sr = sf.read(str(path), always_2d=False)
+    if getattr(audio, "ndim", 1) > 1:
+        audio = np.mean(audio, axis=1)
+    audio = np.asarray(audio, dtype=np.float32)
+    if sr != 16000:
+        # faster-whisper expects 16 kHz when given a raw array.
+        import librosa
+        audio = librosa.resample(audio, orig_sr=sr, target_sr=16000).astype(np.float32)
     # First run downloads the model; keep it small/CPU-friendly for desktop.
     model = WhisperModel("base", device="cpu", compute_type="int8")
-    path = project / "stems" / name
     segments, _info = model.transcribe(
-        str(path), word_timestamps=True, vad_filter=True, beam_size=1,
+        audio, word_timestamps=True, vad_filter=True, beam_size=1,
     )
     words = []
     for segment in segments:
